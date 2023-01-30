@@ -1,3 +1,2 @@
-from handlers import client
-from handlers import admin
-from keyboards.client_kb import kb_client
+from handlers import client_handlers
+from handlers import admin_handlers
