@@ -20,7 +20,7 @@ def get_num_keyboard(count):
 def get_kb_docs():
     kb_docs = ReplyKeyboardMarkup(resize_keyboard=True)
     kb_docs.add(KeyboardButton('⬅Вернуться в меню'))
-    for key in school_documents.documents.load_doc():
+    for key in school_documents.documents.load_doc_dict():
         kb_docs.add(KeyboardButton(key))
     return kb_docs
 
@@ -38,7 +38,7 @@ def get_kb_client_menu():
     return kb_client_menu
 
 
-def get_kb_client_questions():
+def get_kb_client_questions_categories():
     kb_client_questions = ReplyKeyboardMarkup(resize_keyboard=True)
     kb_client_questions.add(KeyboardButton('⬅Вернуться в меню'))
     for key in school_questions.school_questions.load_questions():

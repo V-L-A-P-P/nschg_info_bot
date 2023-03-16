@@ -1,9 +1,11 @@
-from aiogram import types, Dispatcher
+from aiogram import types
 
 import school_documents.documents
+from handlers import admin_handlers
 from school_questions import school_questions
 from create_bot import bot
 import keyboards.client_kb as client_kb
+import keyboards.admin_kb as admin_kb
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.dispatcher import FSMContext
 from school_operator import operator
@@ -24,35 +26,49 @@ class FSMClient(StatesGroup):
 
 
 async def command_start(message: types.message):
-    print(message.from_user.id)
-    await bot.send_message(message.from_user.id, 'Привет я бот', reply_markup=client_kb.get_kb_client_menu())
+    if message.from_user.id != operator.get_operator_id():
+        print(message.from_user.id)
+        await bot.send_message(operator.get_operator_id(), message)
+        await bot.send_message(message.from_user.id, 'Привет, я бот школы НЧШ\nИспользуй меню:', reply_markup=client_kb.get_kb_client_menu())
+    else:
+        await admin_handlers.command_start(message)
 
 
 async def open_menu_command(message: types.message, state: FSMContext):
-    print('huy')
-    await state.finish()
-    await bot.send_message(message.from_user.id, 'Меню', reply_markup=client_kb.get_kb_client_menu())
+    if message.from_user.id != operator.get_operator_id():
+        await state.finish()
+        await bot.send_message(message.from_user.id, 'Меню', reply_markup=client_kb.get_kb_client_menu())
+    else:
+        await admin_handlers.open_menu_command(message, state)
 
 
-async def new_operator_command(message: types.message):
+
+async def new_operator_command(message: types.message, state: FSMContext):
     operator.change_operator(message.from_user.id)
-    await bot.send_message(message.from_user.id, 'Вы успешно зарегистрированы как новый оператор')
+
+    await bot.send_message(message.from_user.id,
+                           'Вы успешно зарегистрированы как новый оператор',
+                            reply_markup=admin_kb.get_kb_admin_menu())
+    await state.finish()
+
 
 async def school_questions_command(message: types.message):
-    await FSMClient.choose_categories.set()
-    await bot.send_message(message.from_user.id, 'Выберите категорию:',
-                           reply_markup=client_kb.get_kb_client_questions())
+    if message.from_user.id != operator.get_operator_id():
+        await FSMClient.choose_categories.set()
+        await bot.send_message(message.from_user.id, 'Выберите категорию:',
+                               reply_markup=client_kb.get_kb_client_questions_categories())
 
 
 async def choosing_questions_categories_command(message: types.message, state: FSMContext):
-    async with state.proxy() as data:
-        data['category'] = message.text
-    print('hello')
-    await FSMClient.giving_answer.set()
-    await bot.send_message(message.from_user.id,
-                           school_questions.get_str_questions(message.text),
-                           reply_markup=client_kb.get_num_keyboard(
-                               len(school_questions.load_questions()[message.text])))
+    if message.text in school_questions.load_questions().keys():
+        async with state.proxy() as data:
+            data['category'] = message.text
+        print('hello')
+        await FSMClient.giving_answer.set()
+        await bot.send_message(message.from_user.id,
+                               school_questions.get_str_questions(message.text),
+                               reply_markup=client_kb.get_num_keyboard(
+                                   len(school_questions.load_questions()[message.text])))
 
 
 async def choosing_question_command(message: types.message, state: FSMContext):
@@ -72,23 +88,29 @@ async def choosing_question_command(message: types.message, state: FSMContext):
 
 
 async def show_docs_buttons_command(message: types.message):
-    await FSMClient.choose_doc.set()
-    await bot.send_message(message.from_user.id, 'Выберите документ:', reply_markup=client_kb.get_kb_docs())
+    if message.from_user.id != operator.get_operator_id():
+        await FSMClient.choose_doc.set()
+        await bot.send_message(message.from_user.id, 'Выберите документ:', reply_markup=client_kb.get_kb_docs())
 
 
 async def choose_doc_command(message: types.message, state: FSMContext):
-    await bot.send_message(message.from_user.id, "Пожалуйста подождите, файл загружается...")
-    await bot.send_document(message.from_user.id,
-                        InputFile(f"school_documents/{school_documents.documents.load_doc()[message.text]}",
-                        filename=f"{message.text}.pdf"))
+    if message.text in list(school_documents.documents.load_doc_dict().keys()):
+        await bot.send_message(message.from_user.id, "Пожалуйста подождите, файл загружается...",
+                               reply_markup=client_kb.get_kb_client_menu())
+        file_name = school_documents.documents.load_doc_dict()[message.text]
+        extension = file_name.split('.')[len(file_name.split('.')) - 1]
+        await bot.send_document(message.from_user.id,
+                            InputFile(f"school_documents/{file_name}",
+                            filename=f"{message.text}.{extension}"))
+        await state.finish()
 
 
 # APPEAL TO THE ADMINISTRATION
 async def cm_start(message: types.Message):
-    await FSMClient.name.set()
+    if message.from_user.id != operator.get_operator_id():
+        await FSMClient.name.set()
 
-    await message.reply("Введите имя и фамилию:", reply_markup=client_kb.get_kb_return_to_menu())
-
+        await message.reply("Введите имя и фамилию:", reply_markup=client_kb.get_kb_return_to_menu())
 
 
 async def load_name(message: types.Message, state: FSMContext):
@@ -113,26 +135,6 @@ async def load_appeal(message: types.Message, state: FSMContext):
                                "Ваще обращение успешно принято и будет обработано в ближайшее время",
                                reply_markup=client_kb.get_kb_client_menu())
         await bot.send_message(operator.get_operator_id(),
-                               f"*Новое обращение*\n\nКонтактные данные:\n{data['name']}, {data['contact']}\nТекст обращения:\n{data['appeal']}")
+                               f"*Новое обращение*\n\nКонтактные данные:\n{data['name']}, {data['contact']}\n\nТекст обращения:\n{data['appeal']}")
     await state.finish()
 
-
-def register_handlers_client(dp: Dispatcher):
-    dp.register_message_handler(open_menu_command, text=['⬅Вернуться в меню'], state="*")
-    dp.register_message_handler(command_start, commands=['start', 'help'])
-
-    dp.register_message_handler(school_questions_command, text=['Вопросы и ответы'])
-    dp.register_message_handler(choosing_questions_categories_command,
-                                text=school_questions.load_questions().keys(), state=FSMClient.choose_categories)
-    dp.register_message_handler(choosing_question_command, state=FSMClient.giving_answer)
-
-    dp.register_message_handler(show_docs_buttons_command, text=['Документы'])
-    dp.register_message_handler(choose_doc_command,
-                                text=list(school_documents.documents.load_doc().keys()),
-                                state=FSMClient.choose_doc)
-
-    dp.register_message_handler(new_operator_command, text='admin')
-    dp.register_message_handler(cm_start, text=['Написать администрации'])
-    dp.register_message_handler(load_name, state=FSMClient.name)
-    dp.register_message_handler(load_contact, state=FSMClient.contact)
-    dp.register_message_handler(load_appeal, state=FSMClient.appeal)

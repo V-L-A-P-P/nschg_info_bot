@@ -15,4 +15,4 @@ def get_operator_id():
         else:
             return operator_id
     except FileNotFoundError:
-        print("Error: файл с id операторов отсутствует"             )
+        print("Error: файл с id операторов отсутствует")
